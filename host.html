@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Squidward — Host</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+:root{--bg:#090909;--sur:#111;--bdr:#222;--acc:#ff5500;--txt:#efefef;--mut:#555;--grn:#00cc66;--red:#ef4444;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-height:100vh;}
+.view{display:none;min-height:100vh;}
+.view.active{display:flex;flex-direction:column;}
+.badge{display:inline-block;background:var(--acc);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:.1em;padding:.15rem .7rem;}
+.prompt{font-family:'Bebas Neue',sans-serif;font-size:3.2rem;line-height:1.05;margin:1rem 0 1.5rem;}
+.timer-num{font-family:'Bebas Neue',sans-serif;font-size:5rem;color:var(--acc);line-height:1;}
+.tbar{height:5px;background:var(--bdr);border-radius:3px;overflow:hidden;}
+.tfill{height:100%;background:var(--acc);border-radius:3px;transition:width 1s linear;}
+.vs-wrap{display:flex;gap:1rem;align-items:stretch;margin:1rem 0;}
+.vs-card{flex:1;border:1px solid var(--bdr);padding:1.2rem;background:var(--sur);border-radius:3px;}
+.vs-card h3{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;}
+.big-num{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;color:var(--acc);}
+.vs-div{display:flex;align-items:center;font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--mut);padding:0 .5rem;}
+.vrow{display:flex;align-items:center;gap:.4rem;margin-top:.4rem;}
+.vbar-bg{flex:1;height:7px;background:var(--bdr);border-radius:3px;}
+.vbar-fill{height:100%;background:var(--acc);border-radius:3px;transition:width .5s;}
+.vnum{font-family:'Bebas Neue',sans-serif;font-size:.9rem;color:var(--acc);min-width:1.5rem;text-align:right;}
+.score-row{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--bdr);}
+.score-row:last-child{border-bottom:none;}
+.spts{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--acc);}
+.btn{font-family:'Bebas Neue',sans-serif;letter-spacing:.1em;border:none;cursor:pointer;padding:.7rem 1.5rem;font-size:1.1rem;border-radius:2px;}
+.btn-p{background:var(--acc);color:#fff;}.btn-p:hover{background:#cc4400;}.btn-p:disabled{background:#442200;color:var(--mut);}
+.chip{padding:.25rem .7rem;border:1px solid var(--bdr);font-size:.82rem;border-radius:2px;background:var(--sur);display:inline-block;}
+select,input[type=number]{background:var(--sur);border:1px solid var(--bdr);color:var(--txt);padding:.5rem;font-size:1rem;font-family:'DM Sans',sans-serif;border-radius:2px;width:100%;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+.code-big{font-family:'Bebas Neue',sans-serif;font-size:6rem;color:var(--acc);letter-spacing:.2em;line-height:1;}
+.anon-card{border:1px solid var(--bdr);background:var(--sur);padding:1rem;margin-bottom:.8rem;border-radius:3px;}
+.anon-card h4{font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.12em;color:var(--mut);margin-bottom:.3rem;}
+.delib-names{display:flex;gap:3rem;align-items:center;margin:1.5rem 0;}
+.dp .side{font-family:'Bebas Neue',sans-serif;font-size:.9rem;letter-spacing:.1em;color:var(--acc);}
+.dp .name{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;}
+.lbl{font-family:'Bebas Neue',sans-serif;font-size:.75rem;letter-spacing:.15em;color:var(--mut);}
+#dbg{position:fixed;top:0;right:0;background:rgba(0,0,0,.9);border-left:1px solid var(--acc);padding:3px 7px;font-family:monospace;font-size:9px;color:#0f0;max-height:30vh;overflow-y:auto;z-index:9999;width:220px;line-height:1.3;}
+</style>
+</head>
+<body>
+<div id="dbg"></div>
+
+<!-- SETUP -->
+<div id="v-setup" class="view active">
+<div style="max-width:580px;margin:0 auto;padding:3rem 2rem;">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:4rem;color:var(--acc);">SQUIDWARD</div>
+  <div class="lbl" style="margin-bottom:2rem;">GAME HOST</div>
+  <div style="margin-bottom:1.2rem;"><div class="lbl" style="margin-bottom:.3rem;">SELECT PACK</div><select id="pack-select"><option value="">Loading...</option></select></div>
+  <div class="grid2" style="margin-bottom:1.2rem;">
+    <div><div class="lbl" style="margin-bottom:.3rem;">ROUNDS (1-3)</div><input type="number" id="round-count" value="1" min="1" max="3"></div>
+    <div><div class="lbl" style="margin-bottom:.3rem;">QUESTIONS / ROUND (min 10)</div><input type="number" id="q-per-round" value="10" min="10" max="20"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:1.5rem;">
+    <input type="checkbox" id="allow-delib" checked style="width:auto;accent-color:var(--acc);">
+    <label for="allow-delib" style="font-size:.9rem;">Enable deliberation on Poll questions</label>
+  </div>
+  <button class="btn btn-p" onclick="createRoom()">CREATE ROOM</button>
+  <div id="setup-err" style="color:var(--red);font-size:.85rem;margin-top:.5rem;"></div>
+</div>
+</div>
+
+<!-- LOBBY -->
+<div id="v-lobby" class="view">
+<div style="display:grid;grid-template-columns:1fr 1fr;min-height:100vh;">
+  <div style="padding:3rem;border-right:1px solid var(--bdr);">
+    <div class="lbl">ROOM CODE</div>
+    <div class="code-big" id="lobby-code"></div>
+    <div class="lbl" style="margin-top:1.5rem;">PLAYERS (<span id="p-count">0</span>)</div>
+    <div id="p-chips" style="display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0 2rem;"></div>
+    <button class="btn btn-p" id="start-btn" onclick="startGame()" disabled>START GAME</button>
+    <div id="lobby-msg" style="color:var(--mut);font-size:.82rem;margin-top:.4rem;"></div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;">
+    <div class="lbl">SCAN TO JOIN</div>
+    <div id="qr-code" style="background:#fff;padding:1rem;border-radius:4px;"></div>
+    <div style="font-size:.72rem;color:var(--mut);max-width:220px;word-break:break-all;text-align:center;" id="qr-url"></div>
+  </div>
+</div>
+</div>
+
+<!-- WRITING WAIT -->
+<div id="v-writing" class="view">
+<div style="max-width:600px;margin:0 auto;padding:3rem 2rem;text-align:center;">
+  <div class="badge">WRITE-OFF SETUP</div>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:3rem;margin:1rem 0;">ROUND <span id="wr-round">1</span></div>
+  <div style="color:var(--mut);margin-bottom:2rem;">Players are privately writing their answers...</div>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:5rem;color:var(--acc);" id="wr-count">0 / 0</div>
+  <div class="lbl" id="wr-msg" style="margin-top:.5rem;"></div>
+</div>
+</div>
+
+<!-- QUESTION -->
+<div id="v-question" class="view">
+<div style="display:grid;grid-template-columns:1fr auto;align-items:start;gap:2rem;padding:1.5rem 3rem;border-bottom:1px solid var(--bdr);">
+  <div>
+    <div id="q-badge" class="badge">TYPE</div>
+    <div id="q-prompt" class="prompt">Prompt</div>
+  </div>
+  <div style="text-align:right;min-width:130px;">
+    <div class="timer-num" id="q-timer">60</div>
+    <div class="tbar" style="margin-left:auto;width:100px;"><div class="tfill" id="q-tfill"></div></div>
+    <div class="lbl" id="q-rlabel" style="margin-top:.3rem;">ROUND 1 Q 1</div>
+  </div>
+</div>
+<div style="padding:1.5rem 3rem;flex:1;" id="q-body"></div>
+</div>
+
+<!-- DELIBERATING -->
+<div id="v-delib" class="view">
+<div style="max-width:800px;margin:0 auto;padding:3rem 2rem;text-align:center;">
+  <div id="delib-badge" class="badge">DELIBERATION</div>
+  <div id="delib-prompt" style="font-family:'Bebas Neue',sans-serif;font-size:2.5rem;margin:1rem 0 2rem;line-height:1.05;"></div>
+  <div class="delib-names" style="justify-content:center;">
+    <div class="dp"><div class="side">AGREE</div><div class="name" id="delib-a"></div></div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--mut);">VS</div>
+    <div class="dp"><div class="side">DISAGREE</div><div class="name" id="delib-b"></div></div>
+  </div>
+  <div class="timer-num" id="delib-timer">60</div>
+  <div class="tbar" style="max-width:200px;margin:.4rem auto;"><div class="tfill" id="delib-tfill"></div></div>
+  <div style="color:var(--mut);font-size:.85rem;margin-top:.8rem;">Room votes when timer ends</div>
+</div>
+</div>
+
+<!-- DELIB VOTE -->
+<div id="v-dvote" class="view">
+<div style="max-width:800px;margin:0 auto;padding:3rem 2rem;text-align:center;">
+  <div class="badge">WHO ARGUED BETTER?</div>
+  <div style="margin:2rem 0;" id="dvote-body"></div>
+  <div class="lbl" id="dvote-count">0 / 0 VOTED</div>
+  <div class="timer-num" id="dvote-timer">20</div>
+  <div class="tbar" style="max-width:200px;margin:.4rem auto;"><div class="tfill" id="dvote-tfill"></div></div>
+</div>
+</div>
+
+<!-- RESULTS -->
+<div id="v-results" class="view">
+<div style="max-width:700px;margin:0 auto;padding:3rem 2rem;">
+  <div id="res-badge" class="badge">RESULTS</div>
+  <div id="res-body" style="margin:1.5rem 0;"></div>
+  <div class="lbl" style="margin-bottom:.5rem;">LEADERBOARD</div>
+  <div id="res-scores"></div>
+  <div id="res-next" style="color:var(--mut);font-size:.85rem;margin-top:1.5rem;"></div>
+</div>
+</div>
+
+<!-- ROUND END -->
+<div id="v-roundend" class="view">
+<div style="max-width:700px;margin:0 auto;padding:3rem 2rem;text-align:center;">
+  <div class="lbl">END OF</div>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:4rem;color:var(--acc);" id="re-label">ROUND 1</div>
+  <div id="re-scores" style="margin:2rem 0;text-align:left;"></div>
+  <div class="lbl" id="re-next"></div>
+</div>
+</div>
+
+<!-- GAMEOVER -->
+<div id="v-gameover" class="view">
+<div style="max-width:700px;margin:0 auto;padding:3rem 2rem;text-align:center;">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:4rem;color:var(--acc);">FINAL SCORES</div>
+  <div id="final-scores" style="margin:2rem 0;text-align:left;"></div>
+</div>
+</div>
+
+<script>
+const{createClient}=supabase;
+const db=createClient('https://nfdfwapbxjkqwqwanhoi.supabase.co','sb_publishable_BIMyzuSl9sw4-oahILCGjQ_Bx-XAhxq');
+function dbg(m,e){const el=document.getElementById('dbg');if(!el)return;const t=new Date().toISOString().slice(11,19);const d=document.createElement('div');d.style.color=e?'#f55':'#0f0';d.textContent=t+' '+m;el.appendChild(d);el.scrollTop=el.scrollHeight;}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+function showView(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function scoreRows(arr){return arr.map((p,i)=>`<div class="score-row"><div>${i+1}. ${esc(p.display_name)}</div><div class="spts">${p.score||0}</div></div>`).join('');}
+
+const ATIMER=60,HTIMER=15,VTIMER=25,DTIMER=60,DVTIMER=20,RPAUSE=7;
+const POINTS={fw:100,pick:250,match:250,delib:500};
+const TLABEL={free_write:'WRITE-OFF',player_pick:'PLAYER PICK',match:'MATCH UP',poll:'POLL',hot_take:'HOT TAKE'};
+
+let roomId=null,packId=null;
+let players=[];
+let roundCount=1,allowDelib=true,qPerRound=10,currentRound=0;
+let roomQs=[],currentQIdx=0;
+let timerInterval=null,submitPoll=null,lobbyPoll=null,writingPoll=null;
+let phaseEnded=false;
+
+// LOBBY
+async function loadPacks(){
+  const{data}=await db.from('packs').select('id,name').eq('is_approved',true);
+  const s=document.getElementById('pack-select');
+  s.innerHTML=(data||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+}
+
+async function createRoom(){
+  packId=document.getElementById('pack-select').value;
+  if(!packId){document.getElementById('setup-err').textContent='Select a pack.';return;}
+  roundCount=Math.max(1,Math.min(3,parseInt(document.getElementById('round-count').value)||1));
+  qPerRound=Math.max(10,parseInt(document.getElementById('q-per-round').value)||10);
+  allowDelib=document.getElementById('allow-delib').checked;
+  const code=Math.random().toString(36).slice(2,6).toUpperCase();
+  const{data:room,error}=await db.from('rooms').insert({join_code:code,pack_id:packId,status:'waiting',phase:'lobby',round_count:roundCount,current_round:0}).select().single();
+  if(error){document.getElementById('setup-err').textContent='Error: '+error.message;return;}
+  roomId=room.id;
+  document.getElementById('lobby-code').textContent=code;
+  const joinUrl=window.location.origin+window.location.pathname.replace('host.html','join.html')+'?code='+code;
+  document.getElementById('qr-url').textContent=joinUrl;
+  document.getElementById('qr-code').innerHTML='';
+  new QRCode(document.getElementById('qr-code'),{text:joinUrl,width:200,height:200,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});
+  showView('v-lobby');
+  lobbyPoll=setInterval(async()=>{
+    const{data:ps}=await db.from('players').select('id,display_name,anonymous_name,score').eq('room_id',roomId).order('display_name');
+    if(!ps)return;
+    players=ps;
+    document.getElementById('p-count').textContent=ps.length;
+    document.getElementById('p-chips').innerHTML=ps.map(p=>`<div class="chip">${esc(p.display_name)}</div>`).join('');
+    document.getElementById('start-btn').disabled=ps.length<2;
+    document.getElementById('lobby-msg').textContent=ps.length<2?'Need at least 2 players':'Ready!';
+  },2500);
+}
+
+// GAME START
+async function startGame(){
+  clearInterval(lobbyPoll);
+  await db.from('rooms').update({status:'active'}).eq('id',roomId);
+  currentRound=1;
+  await startRound();
+}
+
+async function startRound(){
+  dbg('startRound '+currentRound);
+  const{data:ps}=await db.from('players').select('id,display_name,anonymous_name,score').eq('room_id',roomId);
+  players=ps||players;
+  await db.from('rooms').update({current_round:currentRound}).eq('id',roomId);
+  if(currentRound<=2){
+    await setupWritingPhase();
+    document.getElementById('wr-round').textContent=currentRound;
+    document.getElementById('wr-count').textContent='0 / '+players.length;
+    await db.from('rooms').update({phase:'writing'}).eq('id',roomId);
+    showView('v-writing');
+    startWritingPoll();
+  }else{
+    await buildAndPlayRound();
+  }
+}
+
+// WRITING PHASE
+async function setupWritingPhase(){
+  const{data:fwQs}=await db.from('questions').select('id,prompt_text').eq('pack_id',packId).eq('question_type','free_write');
+  if(!fwQs||!fwQs.length){dbg('no fw questions',true);return;}
+  const fwQ=fwQs[(currentRound-1)%fwQs.length];
+  const shuffled=shuffle([...players]);
+  const pairs=[];
+  for(let i=0;i<shuffled.length;i+=2){
+    const pid=crypto.randomUUID();
+    const pls=[shuffled[i].id];
+    if(i+1<shuffled.length)pls.push(shuffled[i+1].id);
+    else if(pairs.length>0){pairs[pairs.length-1].playerIds.push(shuffled[i].id);continue;}
+    pairs.push({pairId:pid,playerIds:pls,questionId:fwQ.id});
+  }
+  await db.from('free_write_prompts').delete().eq('room_id',roomId).eq('round_number',currentRound);
+  const rows=[];
+  for(const pair of pairs)for(const pid of pair.playerIds)rows.push({room_id:roomId,question_id:pair.questionId,round_number:currentRound,player_id:pid,pair_id:pair.pairId});
+  if(rows.length)await db.from('free_write_prompts').insert(rows);
+  dbg('fw pairs: '+pairs.length);
+}
+
+function startWritingPoll(){
+  clearInterval(writingPoll);
+  writingPoll=setInterval(async()=>{
+    const{data}=await db.from('free_write_prompts').select('answer').eq('room_id',roomId).eq('round_number',currentRound);
+    const total=players.length,answered=(data||[]).filter(r=>r.answer).length;
+    document.getElementById('wr-count').textContent=answered+' / '+total;
+    document.getElementById('wr-msg').textContent=answered<total?'Waiting...':'Everyone ready!';
+    if(answered>=total){clearInterval(writingPoll);setTimeout(buildAndPlayRound,1500);}
+  },3000);
+}
+
+// ROUND BUILDING
+async function buildAndPlayRound(){
+  dbg('buildRound r='+currentRound);
+  const{data:allQs}=await db.from('questions').select('id,prompt_text,question_type').eq('pack_id',packId);
+  if(!allQs||!allQs.length){dbg('no questions',true);return;}
+  const byType={};
+  allQs.forEach(q=>{if(!byType[q.question_type])byType[q.question_type]=[];byType[q.question_type].push(q);});
+  const hasFw=currentRound<=2&&(byType.free_write||[]).length>0;
+  const middleSlots=qPerRound-1-(hasFw?1:0);
+  const pool=shuffle([...(byType.player_pick||[]),...(byType.match||[]),...(byType.poll||[])]);
+  const seq=[];
+  for(let i=0;i<middleSlots;i++)seq.push(pool[i%Math.max(pool.length,1)]);
+  if(hasFw){const fwQ=byType.free_write[(currentRound-1)%byType.free_write.length];seq.splice(Math.floor(Math.random()*(seq.length+1)),0,fwQ);}
+  const htQ=(byType.hot_take||[])[0]||pool[0];
+  if(htQ)seq.push(htQ);
+  dbg('seq:'+seq.map(q=>q.question_type).join(','));
+  const{data:old}=await db.from('room_questions').select('id').eq('room_id',roomId).eq('round_number',currentRound);
+  if(old&&old.length)await db.from('room_questions').delete().in('id',old.map(r=>r.id));
+  const{data:inserted}=await db.from('room_questions').insert(seq.map((q,i)=>({room_id:roomId,question_id:q.id,order_index:i,round_number:currentRound,status:'pending'}))).select();
+  roomQs=(inserted||[]).map((rq,i)=>({...rq,question:seq[i]})).sort((a,b)=>a.order_index-b.order_index);
+  await assignPlayers();
+  await db.from('rooms').update({fw_pair_idx:0,phase:'active'}).eq('id',roomId);
+  currentQIdx=0;
+  await loadQuestion(0);
+}
+
+async function assignPlayers(){
+  const{data:fresh}=await db.from('players').select('id,score').eq('room_id',roomId);
+  if(fresh)fresh.forEach(p=>{const lp=players.find(x=>x.id===p.id);if(lp)lp.score=p.score||0;});
+  const sp=shuffle([...players]);let idx=0;
+  for(const rq of roomQs){
+    const t=rq.question.question_type;
+    if(t==='match'){
+      const s=sp[idx%sp.length];idx++;
+      await db.from('room_questions').update({subject_player_id:s.id}).eq('id',rq.id);
+      rq.subject_player_id=s.id;
+    }else if(t==='player_pick'){
+      const a=sp[idx%sp.length],b=sp[(idx+1)%sp.length];idx+=2;
+      await db.from('room_questions').update({pick_player_a:a.id,pick_player_b:b.id}).eq('id',rq.id);
+      rq.pick_player_a=a.id;rq.pick_player_b=b.id;
+    }else if(t==='hot_take'){
+      const sorted=[...players].sort((a,b)=>(a.score||0)-(b.score||0));
+      const a=sorted[0],b=sorted[1]||sorted[0];
+      await db.from('room_questions').update({pick_player_a:a.id,pick_player_b:b.id}).eq('id',rq.id);
+      rq.pick_player_a=a.id;rq.pick_player_b=b.id;
+    }
+  }
+}
+
+// QUESTION LOADING
+async function loadQuestion(idx){
+  phaseEnded=false;clearInterval(timerInterval);clearInterval(submitPoll);
+  currentQIdx=idx;
+  const rq=roomQs[idx];if(!rq){dbg('no rq at '+idx,true);return;}
+  await db.from('room_questions').update({status:'active'}).eq('id',rq.id);
+  await db.from('rooms').update({phase:'active'}).eq('id',roomId);
+  const type=rq.question.question_type;
+  document.getElementById('q-badge').textContent=TLABEL[type]||type.toUpperCase();
+  document.getElementById('q-prompt').textContent=rq.question.prompt_text;
+  document.getElementById('q-rlabel').textContent='ROUND '+currentRound+' Q '+(idx+1)+'/'+roomQs.length;
+  showView('v-question');
+  if(type==='free_write'){await runFwReveal(rq);return;}
+  const body=document.getElementById('q-body');
+  const pIds=players.map(p=>p.id);
+  if(type==='player_pick'){
+    const{data:ps}=await db.from('players').select('id,display_name').in('id',[rq.pick_player_a,rq.pick_player_b].filter(Boolean));
+    const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+    body.innerHTML=`<div class="vs-wrap">
+      <div class="vs-card"><h3>${esc(pm[rq.pick_player_a]?.display_name||'A')}</h3><div class="big-num" id="pa-c">0</div><div class="lbl">votes</div></div>
+      <div class="vs-div">VS</div>
+      <div class="vs-card"><h3>${esc(pm[rq.pick_player_b]?.display_name||'B')}</h3><div class="big-num" id="pb-c">0</div><div class="lbl">votes</div></div>
+    </div><div style="color:var(--mut);font-size:.9rem;">Submitted: <span id="q-sc" style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:var(--acc);">0</span>/${players.length}</div>`;
+    runSubmitPoll(rq,pIds,ATIMER);
+  }else if(type==='match'){
+    const{data:opts}=await db.from('options').select('id,option_text').eq('question_id',rq.question.id);
+    const oA=opts?.[0],oB=opts?.[1];
+    body.innerHTML=`<div class="lbl" style="margin-bottom:.8rem;">Subject hidden until reveal</div>
+    <div class="vs-wrap">
+      <div class="vs-card"><h3>A</h3><div style="font-size:1.1rem;margin:.3rem 0;">${esc(oA?.option_text||'Option A')}</div><div class="big-num" id="ma-c">0</div></div>
+      <div class="vs-div">VS</div>
+      <div class="vs-card"><h3>B</h3><div style="font-size:1.1rem;margin:.3rem 0;">${esc(oB?.option_text||'Option B')}</div><div class="big-num" id="mb-c">0</div></div>
+    </div><div style="color:var(--mut);font-size:.9rem;">Submitted: <span id="q-sc" style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:var(--acc);">0</span>/${players.length}</div>`;
+    runSubmitPoll(rq,pIds,ATIMER);
+  }else if(type==='poll'){
+    body.innerHTML=`<div class="vs-wrap">
+      <div class="vs-card"><h3 style="color:var(--grn);">AGREE</h3><div class="big-num" id="ag-c">0</div></div>
+      <div class="vs-div">VS</div>
+      <div class="vs-card"><h3 style="color:var(--red);">DISAGREE</h3><div class="big-num" id="dis-c">0</div></div>
+    </div><div style="color:var(--mut);font-size:.9rem;">Submitted: <span id="q-sc" style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:var(--acc);">0</span>/${players.length}</div>`;
+    runSubmitPoll(rq,pIds,ATIMER);
+  }else if(type==='hot_take'){
+    const{data:ps}=await db.from('players').select('id,display_name').in('id',[rq.pick_player_a,rq.pick_player_b].filter(Boolean));
+    const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+    body.innerHTML=`<div class="lbl" style="margin-bottom:1rem;">${HTIMER}s read time then deliberation</div>
+    <div class="delib-names" style="justify-content:flex-start;">
+      <div class="dp"><div class="side">ARGUE AGREE</div><div class="name">${esc(pm[rq.pick_player_a]?.display_name||'?')}</div></div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--mut);">VS</div>
+      <div class="dp"><div class="side">ARGUE DISAGREE</div><div class="name">${esc(pm[rq.pick_player_b]?.display_name||'?')}</div></div>
+    </div>`;
+    let t=HTIMER;
+    document.getElementById('q-timer').textContent=t;
+    document.getElementById('q-tfill').style.width='100%';
+    clearInterval(timerInterval);
+    timerInterval=setInterval(()=>{t--;document.getElementById('q-timer').textContent=t;document.getElementById('q-tfill').style.width=(t/HTIMER*100)+'%';if(t<=0){clearInterval(timerInterval);onAnswerEnd(rq);}},1000);
+  }
+}
+
+function runSubmitPoll(rq,pIds,total){
+  let t=total;
+  document.getElementById('q-timer').textContent=t;
+  document.getElementById('q-tfill').style.width='100%';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{t--;document.getElementById('q-timer').textContent=t;document.getElementById('q-tfill').style.width=(t/total*100)+'%';if(t<=0){clearInterval(timerInterval);clearInterval(submitPoll);setTimeout(()=>onAnswerEnd(rq),600);}},1000);
+  clearInterval(submitPoll);
+  const type=rq.question.question_type;
+  submitPoll=setInterval(()=>{
+    db.from('submissions').select('player_id,selected_option_id,boolean_response,selected_player_id').eq('question_id',rq.question.id).in('player_id',pIds).then(({data})=>{
+      if(!data)return;
+      const cnt=new Set(data.map(s=>s.player_id)).size;
+      const cel=document.getElementById('q-sc');if(cel)cel.textContent=cnt;
+      if(type==='player_pick'){
+        const ac=data.filter(s=>s.selected_player_id===rq.pick_player_a).length;
+        const bc=data.filter(s=>s.selected_player_id===rq.pick_player_b).length;
+        const ea=document.getElementById('pa-c'),eb=document.getElementById('pb-c');
+        if(ea)ea.textContent=ac;if(eb)eb.textContent=bc;
+      }else if(type==='poll'){
+        const ag=data.filter(s=>s.boolean_response===true).length;
+        const di=data.filter(s=>s.boolean_response===false).length;
+        const ea=document.getElementById('ag-c'),eb=document.getElementById('dis-c');
+        if(ea)ea.textContent=ag;if(eb)eb.textContent=di;
+      }else if(type==='match'){
+        const{data:optData}=[];// live count not shown for match to avoid revealing subject
+        const ea=document.getElementById('ma-c'),eb=document.getElementById('mb-c');
+        if(ea)ea.textContent='?';if(eb)eb.textContent='?';
+      }
+      if(cnt>=players.length&&players.length>0){clearInterval(submitPoll);clearInterval(timerInterval);setTimeout(()=>onAnswerEnd(rq),600);}
+    });
+  },3000);
+}
+
+// ANSWER END
+async function onAnswerEnd(rq){
+  if(phaseEnded)return;phaseEnded=true;
+  clearInterval(timerInterval);clearInterval(submitPoll);
+  const type=rq.question.question_type;
+  dbg('answerEnd '+type);
+  if(type==='poll'&&allowDelib)await handlePollDelib(rq);
+  else if(type==='hot_take')await handleHotTakeDelib(rq);
+  else await showResults(rq);
+}
+
+async function handlePollDelib(rq){
+  const pIds=players.map(p=>p.id);
+  const{data:subs}=await db.from('submissions').select('player_id,boolean_response').eq('question_id',rq.question.id).in('player_id',pIds);
+  const agPls=players.filter(p=>(subs||[]).find(s=>s.player_id===p.id&&s.boolean_response===true));
+  const diPls=players.filter(p=>(subs||[]).find(s=>s.player_id===p.id&&s.boolean_response===false));
+  dbg('poll ag='+agPls.length+' di='+diPls.length);
+  if(!agPls.length||!diPls.length){await showResults(rq,{noDelib:true});return;}
+  const sort=a=>[...a].sort((x,y)=>(x.score||0)-(y.score||0));
+  const dA=sort(agPls)[0],dB=sort(diPls)[0];
+  await db.from('room_questions').update({delib_player_a:dA.id,delib_player_b:dB.id}).eq('id',rq.id);
+  rq.delib_player_a=dA.id;rq.delib_player_b=dB.id;
+  await startDelib(rq,dA,dB,'POLL');
+}
+
+async function handleHotTakeDelib(rq){
+  const{data:ps}=await db.from('players').select('id,display_name,score').in('id',[rq.pick_player_a,rq.pick_player_b].filter(Boolean));
+  const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+  await db.from('room_questions').update({delib_player_a:rq.pick_player_a,delib_player_b:rq.pick_player_b}).eq('id',rq.id);
+  rq.delib_player_a=rq.pick_player_a;rq.delib_player_b=rq.pick_player_b;
+  await startDelib(rq,pm[rq.pick_player_a],pm[rq.pick_player_b],'HOT TAKE');
+}
+
+async function startDelib(rq,dA,dB,label){
+  await db.from('rooms').update({phase:'deliberating'}).eq('id',roomId);
+  document.getElementById('delib-badge').textContent=label+' — DELIBERATION';
+  document.getElementById('delib-prompt').textContent=rq.question.prompt_text;
+  document.getElementById('delib-a').textContent=dA?.display_name||'?';
+  document.getElementById('delib-b').textContent=dB?.display_name||'?';
+  showView('v-delib');
+  let t=DTIMER;
+  document.getElementById('delib-timer').textContent=t;
+  document.getElementById('delib-tfill').style.width='100%';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{t--;document.getElementById('delib-timer').textContent=t;document.getElementById('delib-tfill').style.width=(t/DTIMER*100)+'%';if(t<=0){clearInterval(timerInterval);startDelibVote(rq,dA,dB);}},1000);
+}
+
+async function startDelibVote(rq,dA,dB){
+  await db.from('rooms').update({phase:'delib_vote'}).eq('id',roomId);
+  const nonDebs=players.filter(p=>p.id!==dA?.id&&p.id!==dB?.id);
+  const totalV=nonDebs.length;
+  document.getElementById('dvote-body').innerHTML=`<div class="vs-wrap" style="justify-content:center;">
+    <div class="vs-card" style="text-align:center;"><h3>${esc(dA?.display_name||'?')}</h3><div class="lbl">AGREE</div>
+      <div class="vrow"><div class="vbar-bg"><div class="vbar-fill" id="dva-b" style="width:0%;"></div></div><div class="vnum" id="dva-n">0</div></div></div>
+    <div class="vs-div">VS</div>
+    <div class="vs-card" style="text-align:center;"><h3>${esc(dB?.display_name||'?')}</h3><div class="lbl">DISAGREE</div>
+      <div class="vrow"><div class="vbar-bg"><div class="vbar-fill" id="dvb-b" style="width:0%;"></div></div><div class="vnum" id="dvb-n">0</div></div></div>
+  </div>`;
+  document.getElementById('dvote-count').textContent='0 / '+totalV+' VOTED';
+  showView('v-dvote');
+  let t=DVTIMER;
+  document.getElementById('dvote-timer').textContent=t;
+  document.getElementById('dvote-tfill').style.width='100%';
+  let resolved=false;
+  const finish=(dvs)=>{
+    if(resolved)return;resolved=true;
+    clearInterval(dvPoll);clearInterval(dvTim);
+    const aV=(dvs||[]).filter(v=>v.winner_player_id===dA?.id).length;
+    const bV=(dvs||[]).filter(v=>v.winner_player_id===dB?.id).length;
+    onDelibEnd(rq,dA,dB,aV,bV);
+  };
+  const dvPoll=setInterval(()=>{
+    db.from('deliberation_votes').select('winner_player_id,voter_player_id').eq('room_question_id',rq.id).then(({data:dvs})=>{
+      if(!dvs)return;
+      const aV=dvs.filter(v=>v.winner_player_id===dA?.id).length;
+      const bV=dvs.filter(v=>v.winner_player_id===dB?.id).length;
+      const max=Math.max(aV,bV,1);
+      document.getElementById('dvote-count').textContent=(aV+bV)+' / '+totalV+' VOTED';
+      const ab=document.getElementById('dva-b'),bb=document.getElementById('dvb-b');
+      if(ab)ab.style.width=(aV/max*100)+'%';if(bb)bb.style.width=(bV/max*100)+'%';
+      const an=document.getElementById('dva-n'),bn=document.getElementById('dvb-n');
+      if(an)an.textContent=aV;if(bn)bn.textContent=bV;
+      if((aV+bV)>=totalV&&totalV>0)finish(dvs);
+    });
+  },2000);
+  const dvTim=setInterval(()=>{t--;document.getElementById('dvote-timer').textContent=t;document.getElementById('dvote-tfill').style.width=(t/DVTIMER*100)+'%';if(t<=0)db.from('deliberation_votes').select('winner_player_id').eq('room_question_id',rq.id).then(({data})=>finish(data));},1000);
+}
+
+async function onDelibEnd(rq,dA,dB,aV,bV){
+  const su={};
+  if(aV>bV&&dA)su[dA.id]=(su[dA.id]||0)+POINTS.delib;
+  else if(bV>aV&&dB)su[dB.id]=(su[dB.id]||0)+POINTS.delib;
+  await applyScores(su);
+  await showResults(rq,{dA,dB,aV,bV,wasDelib:true});
+}
+
+// FREE WRITE REVEAL
+async function runFwReveal(rq){
+  const{data:prompts}=await db.from('free_write_prompts').select('id,pair_id,player_id,answer,question_id').eq('room_id',roomId).eq('round_number',currentRound);
+  if(!prompts||!prompts.length){await db.from('room_questions').update({status:'completed'}).eq('id',rq.id);await advanceQuestion();return;}
+  const pairMap={};
+  prompts.forEach(p=>{if(!pairMap[p.pair_id])pairMap[p.pair_id]=[];pairMap[p.pair_id].push(p);});
+  const pairs=Object.values(pairMap);
+  const{data:fwQ}=await db.from('questions').select('prompt_text').eq('id',prompts[0].question_id).maybeSingle();
+  document.getElementById('q-prompt').textContent=fwQ?.prompt_text||rq.question.prompt_text;
+  const{data:allPls}=await db.from('players').select('id,display_name').eq('room_id',roomId);
+  const pm={};(allPls||[]).forEach(p=>{pm[p.id]=p;});
+  for(let pi=0;pi<pairs.length;pi++){
+    const entries=pairs[pi];
+    const authorIds=entries.map(e=>e.player_id);
+    const voterCount=Math.max(0,players.length-authorIds.length);
+    // Clear and re-insert submissions for this pair
+    await db.from('submissions').delete().eq('question_id',rq.question.id);
+    const subMap={};
+    for(const e of entries){
+      const{data:sub}=await db.from('submissions').insert({question_id:rq.question.id,player_id:e.player_id,free_text:e.answer||'(no answer)'}).select().single();
+      if(sub)subMap[e.player_id]=sub;
+    }
+    const subIds=Object.values(subMap).map(s=>s.id);
+    await db.from('rooms').update({fw_pair_idx:pi+1}).eq('id',roomId);
+    document.getElementById('q-body').innerHTML=`
+      <div class="lbl" style="margin-bottom:.8rem;">PAIR ${pi+1} OF ${pairs.length}</div>
+      ${entries.map((e,i)=>`<div class="anon-card" id="fwc-${e.player_id}"><h4 id="fwh-${e.player_id}">ANSWER ${String.fromCharCode(65+i)}</h4><p>${esc(e.answer||'(no answer)')}</p><div class="vrow"><div class="vbar-bg"><div class="vbar-fill" id="fwb-${e.player_id}" style="width:0%;"></div></div><div class="vnum" id="fwn-${e.player_id}">0</div></div></div>`).join('')}
+      <div style="color:var(--mut);font-size:.9rem;margin-top:.5rem;">Voted: <span id="fw-vd" style="font-family:'Bebas Neue',sans-serif;color:var(--acc);">0</span> / ${voterCount}</div>`;
+    const finalVotes=await new Promise(resolve=>{
+      let t=VTIMER,done=false;
+      const finish=(vs)=>{if(done)return;done=true;clearInterval(tid);clearInterval(vid);resolve(vs||[]);};
+      document.getElementById('q-timer').textContent=t;
+      document.getElementById('q-tfill').style.width='100%';
+      const tid=setInterval(()=>{t--;document.getElementById('q-timer').textContent=t;document.getElementById('q-tfill').style.width=(t/VTIMER*100)+'%';if(t<=0)subIds.length?db.from('votes').select('submission_id,voter_player_id').in('submission_id',subIds).then(({data})=>finish(data)):finish([]);},1000);
+      const vid=subIds.length?setInterval(()=>{
+        db.from('votes').select('submission_id,voter_player_id').in('submission_id',subIds).then(({data:vs})=>{
+          if(!vs)return;
+          const maxV=Math.max(...entries.map(e=>{const s=subMap[e.player_id];return s?(vs.filter(v=>v.submission_id===s.id).length):0;}),1);
+          entries.forEach(e=>{const s=subMap[e.player_id];if(!s)return;const c=vs.filter(v=>v.submission_id===s.id).length;const bar=document.getElementById('fwb-'+e.player_id),num=document.getElementById('fwn-'+e.player_id);if(bar)bar.style.width=(c/maxV*100)+'%';if(num)num.textContent=c;});
+          const uv=new Set(vs.map(v=>v.voter_player_id));
+          const fvel=document.getElementById('fw-vd');if(fvel)fvel.textContent=uv.size;
+          if(uv.size>=voterCount&&voterCount>0)finish(vs);
+        });
+      },2000):null;
+      if(!subIds.length)finish([]);
+    });
+    const su={};
+    entries.forEach(e=>{const s=subMap[e.player_id];if(!s)return;const v=finalVotes.filter(x=>x.submission_id===s.id).length;su[e.player_id]=(su[e.player_id]||0)+(v*POINTS.fw);});
+    await applyScores(su);
+    entries.forEach(e=>{const h=document.getElementById('fwh-'+e.player_id);if(h)h.textContent=pm[e.player_id]?.display_name||'?';});
+    await new Promise(r=>setTimeout(r,3000));
+  }
+  await db.from('room_questions').update({status:'completed'}).eq('id',rq.id);
+  await advanceQuestion();
+}
+
+// SCORING
+async function applyScores(updates){
+  for(const[pid,pts]of Object.entries(updates)){
+    if(!pts)continue;
+    const p=players.find(x=>x.id===pid);
+    const cur=p?.score||0;
+    await db.from('players').update({score:cur+pts}).eq('id',pid);
+    if(p)p.score=cur+pts;
+  }
+}
+
+// RESULTS
+async function showResults(rq,extra={}){
+  await db.from('room_questions').update({status:'completed'}).eq('id',rq.id);
+  await db.from('rooms').update({phase:'results'}).eq('id',roomId);
+  const type=rq.question.question_type;
+  const pIds=players.map(p=>p.id);
+  const{data:fresh}=await db.from('players').select('id,display_name,score').eq('room_id',roomId).order('score',{ascending:false});
+  if(fresh)fresh.forEach(fp=>{const lp=players.find(p=>p.id===fp.id);if(lp)lp.score=fp.score;});
+  document.getElementById('res-badge').textContent=TLABEL[type]||type.toUpperCase();
+  let body='';
+  if(type==='player_pick'){
+    const{data:subs}=await db.from('submissions').select('player_id,selected_player_id').eq('question_id',rq.question.id).in('player_id',pIds);
+    const{data:ps}=await db.from('players').select('id,display_name').in('id',[rq.pick_player_a,rq.pick_player_b].filter(Boolean));
+    const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+    const aV=(subs||[]).filter(s=>s.selected_player_id===rq.pick_player_a).length;
+    const bV=(subs||[]).filter(s=>s.selected_player_id===rq.pick_player_b).length;
+    const winner=aV>=bV?rq.pick_player_a:rq.pick_player_b;
+    const su={};(subs||[]).forEach(s=>{if(s.selected_player_id===winner)su[s.player_id]=(su[s.player_id]||0)+POINTS.pick;});
+    await applyScores(su);
+    body=`<div style="margin-bottom:.8rem;"><b>${esc(pm[rq.pick_player_a]?.display_name)}</b>: ${aV} &nbsp;|&nbsp; <b>${esc(pm[rq.pick_player_b]?.display_name)}</b>: ${bV}</div><div style="color:var(--acc);font-family:'Bebas Neue',sans-serif;font-size:1.5rem;">MAJORITY: ${esc(pm[winner]?.display_name)} — +${POINTS.pick} each</div>`;
+  }else if(type==='match'){
+    const{data:subs}=await db.from('submissions').select('player_id,selected_option_id').eq('question_id',rq.question.id).in('player_id',pIds);
+    const{data:opts}=await db.from('options').select('id,option_text').eq('question_id',rq.question.id);
+    const{data:subj}=await db.from('players').select('id,display_name').eq('id',rq.subject_player_id).maybeSingle();
+    const subjSub=(subs||[]).find(s=>s.player_id===rq.subject_player_id);
+    const subjOptId=subjSub?.selected_option_id;
+    const subjOpt=(opts||[]).find(o=>o.id===subjOptId);
+    const su={};(subs||[]).forEach(s=>{if(s.selected_option_id===subjOptId)su[s.player_id]=(su[s.player_id]||0)+POINTS.match;});
+    await applyScores(su);
+    body=`<div style="color:var(--mut);margin-bottom:.3rem;">THE SUBJECT WAS</div><div style="font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--acc);">${esc(subj?.display_name||'?')}</div><div style="margin:.4rem 0;">They picked: <b>${esc(subjOpt?.option_text||'?')}</b></div><div style="color:var(--acc);">${Object.keys(su).length} matched — +${POINTS.match} each</div>`;
+  }else if(type==='poll'){
+    if(extra.noDelib)body='<div style="color:var(--mut);">One side was empty — no points awarded.</div>';
+    else if(extra.wasDelib){const w=extra.aV>extra.bV?extra.dA:extra.aV<extra.bV?extra.dB:null;body=`<div>${esc(extra.dA?.display_name)}: ${extra.aV} votes &nbsp;|&nbsp; ${esc(extra.dB?.display_name)}: ${extra.bV} votes</div><div style="color:var(--acc);font-family:'Bebas Neue',sans-serif;font-size:1.5rem;margin-top:.4rem;">${w?'WINNER: '+esc(w.display_name)+' +'+POINTS.delib+' pts':'TIE — NO POINTS'}</div>`;}
+  }else if(type==='hot_take'){
+    if(extra.wasDelib){const w=extra.aV>extra.bV?extra.dA:extra.aV<extra.bV?extra.dB:null;body=`<div>${esc(extra.dA?.display_name)}: ${extra.aV} &nbsp;|&nbsp; ${esc(extra.dB?.display_name)}: ${extra.bV}</div><div style="color:var(--acc);font-family:'Bebas Neue',sans-serif;font-size:1.5rem;margin-top:.4rem;">${w?'WINNER: '+esc(w.display_name)+' +'+POINTS.delib+' pts':'TIE — NO POINTS'}</div>`;}
+  }else if(type==='free_write'){
+    body='<div style="color:var(--mut);">Write-Off complete — scores awarded above.</div>';
+  }
+  document.getElementById('res-body').innerHTML=body;
+  const sorted=[...players].sort((a,b)=>(b.score||0)-(a.score||0));
+  document.getElementById('res-scores').innerHTML=scoreRows(sorted);
+  const isLast=currentQIdx>=roomQs.length-1,isLastRound=currentRound>=roundCount;
+  document.getElementById('res-next').textContent=isLast?(isLastRound?'Final scores coming up...':'Next round in '+RPAUSE+'s...'):'Next question in '+RPAUSE+'s...';
+  showView('v-results');
+  setTimeout(advanceQuestion,RPAUSE*1000);
+}
+
+async function advanceQuestion(){
+  currentQIdx++;
+  if(currentQIdx<roomQs.length)await loadQuestion(currentQIdx);
+  else await endRound();
+}
+
+async function endRound(){
+  await db.from('rooms').update({phase:'round_end'}).eq('id',roomId);
+  const{data:fresh}=await db.from('players').select('id,display_name,score').eq('room_id',roomId).order('score',{ascending:false});
+  document.getElementById('re-label').textContent='ROUND '+currentRound+' OVER';
+  document.getElementById('re-scores').innerHTML=scoreRows(fresh||[]);
+  const isLast=currentRound>=roundCount;
+  document.getElementById('re-next').textContent=isLast?'Final scores coming up...':'Starting round '+(currentRound+1)+' in 10 seconds...';
+  showView('v-roundend');
+  if(isLast)setTimeout(endGame,8000);
+  else setTimeout(()=>{currentRound++;startRound();},10000);
+}
+
+async function endGame(){
+  await db.from('rooms').update({status:'finished',phase:'finished'}).eq('id',roomId);
+  const{data:scores}=await db.from('players').select('display_name,score').eq('room_id',roomId).order('score',{ascending:false});
+  document.getElementById('final-scores').innerHTML=scoreRows(scores||[]);
+  showView('v-gameover');
+}
+
+loadPacks();
+</script>
+</body>
+</html>
