@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Squidward</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#090909;--sur:#111;--bdr:#222;--acc:#ff5500;--txt:#efefef;--mut:#555;--grn:#00cc66;--red:#ef4444;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-height:100vh;max-width:420px;margin:0 auto;}
+.view{display:none;min-height:100vh;flex-direction:column;}
+.view.active{display:flex;}
+.page{padding:1.5rem;flex:1;display:flex;flex-direction:column;}
+.center{align-items:center;justify-content:center;text-align:center;}
+.display{font-family:'Bebas Neue',sans-serif;letter-spacing:.05em;}
+input[type=text],textarea{width:100%;background:var(--sur);border:1px solid var(--bdr);color:var(--txt);padding:.8rem;font-size:1rem;font-family:'DM Sans',sans-serif;border-radius:2px;outline:none;}
+input[type=text]:focus,textarea:focus{border-color:var(--acc);}
+textarea{resize:none;min-height:120px;line-height:1.5;}
+.btn{display:block;width:100%;font-family:'Bebas Neue',sans-serif;letter-spacing:.1em;border:none;cursor:pointer;padding:.9rem;font-size:1.2rem;border-radius:2px;margin-top:.8rem;text-align:center;}
+.btn-acc{background:var(--acc);color:#fff;}.btn-acc:disabled{background:#442200;color:var(--mut);cursor:not-allowed;}
+.btn-sec{background:var(--sur);color:var(--txt);border:1px solid var(--bdr);}
+.btn-ans{background:var(--sur);border:1px solid var(--bdr);padding:1rem 1.2rem;margin-top:.7rem;font-size:1rem;font-family:'DM Sans',sans-serif;border-radius:2px;text-align:left;cursor:pointer;width:100%;color:var(--txt);}
+.btn-ans:hover{border-color:var(--acc);}
+.btn-ans.selected{border-color:var(--acc);background:rgba(255,85,0,.12);}
+.badge{display:inline-block;background:var(--acc);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:.9rem;letter-spacing:.1em;padding:.15rem .6rem;margin-bottom:.8rem;}
+.prompt-text{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;line-height:1.1;margin-bottom:1.5rem;}
+.status-msg{font-size:.8rem;color:var(--mut);margin-top:.5rem;text-align:center;}
+.locked-icon{font-size:3rem;margin-bottom:.5rem;}
+.vote-item{border:1px solid var(--bdr);background:var(--sur);padding:.9rem;margin-top:.7rem;border-radius:2px;cursor:pointer;}
+.vote-item:hover{border-color:var(--acc);}
+.vote-item.own-answer{opacity:.4;pointer-events:none;border-style:dashed;}
+.vote-item.voted-for{border-color:var(--acc);background:rgba(255,85,0,.1);}
+.vote-anon{font-family:'Bebas Neue',sans-serif;font-size:.75rem;letter-spacing:.1em;color:var(--mut);margin-bottom:.3rem;}
+.delib-card{background:var(--sur);border:2px solid var(--acc);padding:1.2rem;border-radius:3px;text-align:center;margin-top:1rem;}
+.delib-card h2{font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--acc);}
+.dots::after{content:'.';animation:dots 1.5s steps(3,end) infinite;}
+@keyframes dots{0%,33%{content:'.'}34%,66%{content:'..'}67%,100%{content:'...'}}
+#dbg{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.92);border-top:1px solid var(--acc);padding:3px 8px;font-family:monospace;font-size:9px;color:#0f0;max-height:20vh;overflow-y:auto;z-index:9999;line-height:1.3;}
+</style>
+</head>
+<body>
+<div id="dbg"></div>
+
+<!-- JOIN -->
+<div id="v-join" class="view active">
+<div class="page center">
+  <div class="display" style="font-size:3.5rem;color:var(--acc);">SQUIDWARD</div>
+  <div style="color:var(--mut);font-size:.85rem;margin-bottom:2rem;letter-spacing:.1em;">ENTER ROOM CODE</div>
+  <input type="text" id="join-code" placeholder="ABCD" maxlength="4" style="text-transform:uppercase;font-family:'Bebas Neue',sans-serif;font-size:2rem;text-align:center;letter-spacing:.2em;margin-bottom:.8rem;">
+  <input type="text" id="join-name" placeholder="Your name" maxlength="20">
+  <button class="btn btn-acc" onclick="joinRoom()">JOIN GAME</button>
+  <div id="join-err" class="status-msg" style="color:var(--red);"></div>
+</div>
+</div>
+
+<!-- LOBBY -->
+<div id="v-lobby" class="view">
+<div class="page center">
+  <div class="display" style="font-size:2.5rem;">WAITING FOR HOST</div>
+  <div style="color:var(--mut);font-size:.9rem;margin-top:.5rem;">Game starts soon<span class="dots"></span></div>
+</div>
+</div>
+
+<!-- WRITING PHASE -->
+<div id="v-writing" class="view">
+<div class="page">
+  <div class="badge">WRITE-OFF</div>
+  <div style="color:var(--mut);font-size:.8rem;margin-bottom:.4rem;">ROUND <span id="w-round">1</span> PROMPT</div>
+  <div class="prompt-text" id="w-prompt">Loading...</div>
+  <textarea id="w-answer" placeholder="Type your answer..." maxlength="200"></textarea>
+  <div style="text-align:right;font-size:.75rem;color:var(--mut);margin-top:.2rem;"><span id="w-char">0</span>/200</div>
+  <button class="btn btn-acc" id="w-submit" onclick="submitWriting()">SUBMIT ANSWER</button>
+  <div id="w-status" class="status-msg"></div>
+</div>
+</div>
+
+<!-- WRITING DONE -->
+<div id="v-writing-done" class="view">
+<div class="page center">
+  <div class="locked-icon">✏️</div>
+  <div class="display" style="font-size:2rem;">ANSWER LOCKED</div>
+  <div style="color:var(--mut);font-size:.9rem;margin-top:.5rem;">Waiting for others<span class="dots"></span></div>
+</div>
+</div>
+
+<!-- QUESTION -->
+<div id="v-question" class="view">
+<div class="page">
+  <div class="badge" id="q-badge">TYPE</div>
+  <div class="prompt-text" id="q-prompt">Prompt</div>
+  <div id="q-inputs"></div>
+  <div id="q-status" class="status-msg"></div>
+</div>
+</div>
+
+<!-- SUBMITTED -->
+<div id="v-submitted" class="view">
+<div class="page center">
+  <div class="locked-icon">🔒</div>
+  <div class="display" style="font-size:2rem;">LOCKED IN</div>
+  <div id="sub-status" style="color:var(--mut);font-size:.9rem;margin-top:.5rem;">Waiting<span class="dots"></span></div>
+</div>
+</div>
+
+<!-- VOTING (free write) -->
+<div id="v-voting" class="view">
+<div class="page">
+  <div class="badge">WRITE-OFF VOTE</div>
+  <div id="vote-prompt" style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;line-height:1.1;margin-bottom:1rem;color:var(--mut);"></div>
+  <div id="vote-items"></div>
+  <div id="vote-status" class="status-msg"></div>
+</div>
+</div>
+
+<!-- DELIBERATING -->
+<div id="v-delib" class="view">
+<div class="page center">
+  <div class="badge" id="d-badge">DEBATE</div>
+  <div class="prompt-text" id="d-prompt"></div>
+  <div id="d-body"></div>
+</div>
+</div>
+
+<!-- DELIB VOTE -->
+<div id="v-dvote" class="view">
+<div class="page">
+  <div class="badge">WHO ARGUED BETTER?</div>
+  <div style="color:var(--mut);font-size:.82rem;margin-bottom:1rem;">Only non-debaters vote</div>
+  <div id="dv-body"></div>
+  <div id="dv-status" class="status-msg"></div>
+</div>
+</div>
+
+<!-- GAME OVER -->
+<div id="v-gameover" class="view">
+<div class="page center">
+  <div class="display" style="font-size:3rem;color:var(--acc);">GAME OVER</div>
+  <div style="margin-top:1rem;">Your score</div>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:4rem;color:var(--acc);" id="final-score">0</div>
+  <div id="final-msg" style="color:var(--mut);font-size:.85rem;margin-top:.5rem;"></div>
+</div>
+</div>
+
+<script>
+const{createClient}=supabase;
+const db=createClient('https://nfdfwapbxjkqwqwanhoi.supabase.co','sb_publishable_BIMyzuSl9sw4-oahILCGjQ_Bx-XAhxq');
+function dbg(m,e){const el=document.getElementById('dbg');if(!el)return;const t=new Date().toISOString().slice(11,19);const d=document.createElement('div');d.style.color=e?'#f55':'#0f0';d.textContent=t+' '+m;el.appendChild(d);el.scrollTop=el.scrollHeight;}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+function showView(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');}
+const TLABEL={free_write:'WRITE-OFF',player_pick:'PLAYER PICK',match:'MATCH UP',poll:'POLL',hot_take:'HOT TAKE'};
+
+let roomId=null,playerId=null,displayName='';
+let currentRQId=null,currentQuestionId=null,currentType=null;
+let hasSubmitted=false,hasVoted=false,hasDelibVoted=false,hasWritten=false;
+let mySubmissionId=null,lastRound=0,lastFwPairIdx=0;
+let pollInterval=null,inFlight=false;
+
+(function(){
+  const c=new URLSearchParams(window.location.search).get('code');
+  if(c)document.getElementById('join-code').value=c.toUpperCase();
+})();
+
+// JOIN
+async function joinRoom(){
+  const code=document.getElementById('join-code').value.trim().toUpperCase();
+  const name=document.getElementById('join-name').value.trim();
+  const err=document.getElementById('join-err');
+  if(!code||!name){err.textContent='Enter room code and name.';return;}
+  const{data:room,error:re}=await db.from('rooms').select('id,status').eq('join_code',code).eq('status','waiting').maybeSingle();
+  if(re||!room){err.textContent='Room not found or already started.';return;}
+  const names=['Crimson Llama','Azure Penguin','Neon Badger','Mystic Sloth','Turbo Gecko','Cosmic Ferret','Jazzy Wombat','Pixel Otter','Solar Fox','Lunar Gecko'];
+  const anonName=names[Math.floor(Math.random()*names.length)];
+  const{data:player,error:pe}=await db.from('players').insert({room_id:room.id,display_name:name,anonymous_name:anonName,score:0}).select().single();
+  if(pe){err.textContent='Error: '+pe.message;return;}
+  roomId=room.id;playerId=player.id;displayName=name;
+  showView('v-lobby');
+  pollInterval=setInterval(poll,2000);poll();
+}
+
+// MAIN POLL
+async function poll(){
+  if(inFlight)return;inFlight=true;
+  try{
+    const{data:room,error:re}=await db.from('rooms').select('status,phase,current_round,fw_pair_idx').eq('id',roomId).maybeSingle();
+    if(re||!room)return;
+    const phase=room.phase,round=room.current_round||0,fwIdx=room.fw_pair_idx||0;
+    dbg('phase='+phase+' r='+round+' fw='+fwIdx);
+    if(room.status==='finished'||phase==='finished'){
+      clearInterval(pollInterval);
+      const{data:me}=await db.from('players').select('score').eq('id',playerId).maybeSingle();
+      document.getElementById('final-score').textContent=me?.score||0;
+      document.getElementById('final-msg').textContent='Thanks for playing, '+displayName+'!';
+      showView('v-gameover');return;
+    }
+    // New round reset
+    if(round!==lastRound){
+      lastRound=round;hasSubmitted=false;hasVoted=false;hasDelibVoted=false;hasWritten=false;mySubmissionId=null;currentRQId=null;currentQuestionId=null;lastFwPairIdx=0;
+    }
+    if(phase==='lobby'||phase==='waiting'){showView('v-lobby');return;}
+    if(phase==='writing'){await handleWriting(round);return;}
+    if(phase==='deliberating'){await handleDelib();return;}
+    if(phase==='delib_vote'){await handleDelibVote();return;}
+    if(phase==='results'||phase==='round_end'){
+      if(!document.getElementById('v-submitted').classList.contains('active'))showView('v-submitted');
+      document.getElementById('sub-status').textContent='Waiting for next question...';return;
+    }
+    if(phase==='active'){await handleActive(round,fwIdx);return;}
+  }finally{inFlight=false;}
+}
+
+// WRITING
+async function handleWriting(round){
+  if(hasWritten){if(!document.getElementById('v-writing-done').classList.contains('active'))showView('v-writing-done');return;}
+  const{data:prompt}=await db.from('free_write_prompts').select('id,question_id,answer').eq('room_id',roomId).eq('round_number',round).eq('player_id',playerId).maybeSingle();
+  if(!prompt)return;
+  if(prompt.answer){hasWritten=true;showView('v-writing-done');return;}
+  const{data:q}=await db.from('questions').select('prompt_text').eq('id',prompt.question_id).maybeSingle();
+  document.getElementById('w-round').textContent=round;
+  document.getElementById('w-prompt').textContent=q?.prompt_text||'Write your answer';
+  if(!document.getElementById('v-writing').classList.contains('active')){
+    document.getElementById('w-answer').value='';
+    document.getElementById('w-char').textContent='0';
+    showView('v-writing');
+  }
+}
+
+async function submitWriting(){
+  const ans=document.getElementById('w-answer').value.trim();
+  const st=document.getElementById('w-status');
+  if(!ans){st.textContent='Write something first!';return;}
+  const btn=document.getElementById('w-submit');btn.disabled=true;
+  const{data:prompt}=await db.from('free_write_prompts').select('id').eq('room_id',roomId).eq('round_number',lastRound).eq('player_id',playerId).maybeSingle();
+  if(!prompt){st.textContent='Error: prompt not found';btn.disabled=false;return;}
+  const{error}=await db.from('free_write_prompts').update({answer:ans,submitted_at:new Date().toISOString()}).eq('id',prompt.id);
+  if(error){st.textContent='Error: '+error.message;btn.disabled=false;return;}
+  hasWritten=true;showView('v-writing-done');
+}
+
+// ACTIVE PHASE
+async function handleActive(round,fwIdx){
+  const{data:rq}=await db.from('room_questions').select('id,question_id,status,subject_player_id,pick_player_a,pick_player_b,delib_player_a,delib_player_b').eq('room_id',roomId).eq('status','active').maybeSingle();
+  if(!rq)return;
+  const{data:q}=await db.from('questions').select('id,question_type,prompt_text').eq('id',rq.question_id).maybeSingle();
+  if(!q)return;
+  // Free write reveal
+  if(q.question_type==='free_write'){await handleFwVote(rq,q,fwIdx);return;}
+  // New question
+  if(rq.id!==currentRQId){
+    currentRQId=rq.id;currentQuestionId=q.id;currentType=q.question_type;
+    hasSubmitted=false;hasVoted=false;mySubmissionId=null;
+    await renderQuestion(rq,q);return;
+  }
+  if(hasSubmitted){if(!document.getElementById('v-submitted').classList.contains('active'))showView('v-submitted');}
+}
+
+async function renderQuestion(rq,q){
+  const type=q.question_type;
+  document.getElementById('q-badge').textContent=TLABEL[type]||type.toUpperCase();
+  document.getElementById('q-prompt').textContent=q.prompt_text;
+  document.getElementById('q-status').textContent='';
+  const inp=document.getElementById('q-inputs');
+  if(type==='poll'){
+    inp.innerHTML=`<button class="btn-ans" onclick="submitBool(true,'${rq.id}','${q.id}')">👍 AGREE</button><button class="btn-ans" onclick="submitBool(false,'${rq.id}','${q.id}')">👎 DISAGREE</button>`;
+  }else if(type==='player_pick'){
+    const{data:ps}=await db.from('players').select('id,display_name').in('id',[rq.pick_player_a,rq.pick_player_b].filter(Boolean));
+    const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+    inp.innerHTML=`<button class="btn-ans" onclick="submitPick('${rq.pick_player_a}','${rq.id}','${q.id}')">${esc(pm[rq.pick_player_a]?.display_name||'Player A')}</button><button class="btn-ans" onclick="submitPick('${rq.pick_player_b}','${rq.id}','${q.id}')">${esc(pm[rq.pick_player_b]?.display_name||'Player B')}</button>`;
+  }else if(type==='match'){
+    const{data:opts}=await db.from('options').select('id,option_text').eq('question_id',q.id);
+    const oA=opts?.[0],oB=opts?.[1];
+    inp.innerHTML=`<button class="btn-ans" onclick="submitOpt('${oA?.id}','${rq.id}','${q.id}')">A: ${esc(oA?.option_text||'Option A')}</button><button class="btn-ans" onclick="submitOpt('${oB?.id}','${rq.id}','${q.id}')">B: ${esc(oB?.option_text||'Option B')}</button>`;
+  }else if(type==='hot_take'){
+    const isA=rq.pick_player_a===playerId,isB=rq.pick_player_b===playerId;
+    const{data:ps}=await db.from('players').select('id,display_name').in('id',[rq.pick_player_a,rq.pick_player_b].filter(Boolean));
+    const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+    if(isA||isB){
+      inp.innerHTML=`<div class="delib-card"><h2>YOU'RE DEBATING</h2><div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;margin-top:.3rem;">YOUR SIDE: ${isA?'AGREE':'DISAGREE'}</div><div style="color:var(--mut);font-size:.82rem;margin-top:.5rem;">Prepare your argument — deliberation starts soon</div></div>`;
+    }else{
+      inp.innerHTML=`<div style="color:var(--mut);font-size:.9rem;margin-top:1rem;text-align:center;"><b>${esc(pm[rq.pick_player_a]?.display_name||'?')}</b> argues AGREE<br><b>${esc(pm[rq.pick_player_b]?.display_name||'?')}</b> argues DISAGREE<br><br>You will vote after the debate</div>`;
+    }
+    hasSubmitted=true;
+  }
+  showView('v-question');
+}
+
+// SUBMISSIONS
+async function submitBool(val,rqId,qId){
+  if(hasSubmitted)return;hasSubmitted=true;
+  document.querySelectorAll('.btn-ans').forEach(b=>b.style.pointerEvents='none');
+  const btn=document.querySelector(`.btn-ans[onclick*="${val}"]`);if(btn)btn.classList.add('selected');
+  const{data,error}=await db.from('submissions').insert({question_id:qId,player_id:playerId,boolean_response:val}).select().single();
+  if(error){hasSubmitted=false;document.getElementById('q-status').textContent='Error: '+error.message;document.querySelectorAll('.btn-ans').forEach(b=>b.style.pointerEvents='');return;}
+  mySubmissionId=data?.id;showView('v-submitted');
+}
+
+async function submitPick(pickedId,rqId,qId){
+  if(hasSubmitted)return;hasSubmitted=true;
+  document.querySelectorAll('.btn-ans').forEach(b=>b.style.pointerEvents='none');
+  const{data,error}=await db.from('submissions').insert({question_id:qId,player_id:playerId,selected_player_id:pickedId}).select().single();
+  if(error){hasSubmitted=false;document.getElementById('q-status').textContent='Error: '+error.message;document.querySelectorAll('.btn-ans').forEach(b=>b.style.pointerEvents='');return;}
+  mySubmissionId=data?.id;showView('v-submitted');
+}
+
+async function submitOpt(optId,rqId,qId){
+  if(hasSubmitted)return;hasSubmitted=true;
+  document.querySelectorAll('.btn-ans').forEach(b=>b.style.pointerEvents='none');
+  const{data,error}=await db.from('submissions').insert({question_id:qId,player_id:playerId,selected_option_id:optId}).select().single();
+  if(error){hasSubmitted=false;document.getElementById('q-status').textContent='Error: '+error.message;document.querySelectorAll('.btn-ans').forEach(b=>b.style.pointerEvents='');return;}
+  mySubmissionId=data?.id;showView('v-submitted');
+}
+
+// FREE WRITE VOTE
+async function handleFwVote(rq,q,fwIdx){
+  if(fwIdx===0)return; // not started yet
+  // Reset hasVoted when pair changes
+  if(fwIdx!==lastFwPairIdx){lastFwPairIdx=fwIdx;hasVoted=false;}
+  if(hasVoted){if(!document.getElementById('v-submitted').classList.contains('active'))showView('v-submitted');document.getElementById('sub-status').textContent='Vote cast! Waiting...';return;}
+  // Find current pair's submissions (only 2 in DB at a time)
+  const{data:subs}=await db.from('submissions').select('id,free_text,player_id').eq('question_id',q.id).not('free_text','is',null);
+  if(!subs||!subs.length)return;
+  const isAuthor=subs.some(s=>s.player_id===playerId);
+  if(isAuthor){if(!document.getElementById('v-submitted').classList.contains('active'))showView('v-submitted');document.getElementById('sub-status').textContent='Your answer is being judged...';return;}
+  // Check already voted
+  const subIds=subs.map(s=>s.id);
+  const{data:myV}=await db.from('votes').select('id').in('submission_id',subIds).eq('voter_player_id',playerId);
+  if(myV&&myV.length>0){hasVoted=true;showView('v-submitted');return;}
+  // Show vote screen
+  document.getElementById('vote-prompt').textContent=q.prompt_text;
+  document.getElementById('vote-items').innerHTML=subs.map(s=>`<div class="vote-item" id="vi-${s.id}" onclick="castFwVote('${s.id}','${JSON.stringify(subIds).replace(/"/g,'&quot;')}')"><div class="vote-anon">ANSWER</div><div style="font-size:.95rem;line-height:1.4;">${esc(s.free_text)}</div></div>`).join('');
+  document.getElementById('vote-status').textContent='Pick the best answer!';
+  showView('v-voting');
+}
+
+async function castFwVote(subId){
+  if(hasVoted)return;hasVoted=true;
+  document.querySelectorAll('.vote-item').forEach(el=>el.style.pointerEvents='none');
+  document.getElementById('vi-'+subId)?.classList.add('voted-for');
+  const{error}=await db.from('votes').insert({submission_id:subId,voter_player_id:playerId});
+  if(error){hasVoted=false;document.querySelectorAll('.vote-item').forEach(el=>el.style.pointerEvents='');document.getElementById('vote-status').textContent='Error: '+error.message;return;}
+  showView('v-submitted');document.getElementById('sub-status').textContent='Vote cast! Waiting for results...';
+}
+
+// DELIBERATION
+async function handleDelib(){
+  const{data:rq}=await db.from('room_questions').select('id,question_id,delib_player_a,delib_player_b').eq('room_id',roomId).eq('status','active').maybeSingle();
+  if(!rq)return;
+  const isA=rq.delib_player_a===playerId,isB=rq.delib_player_b===playerId;
+  const{data:q}=await db.from('questions').select('prompt_text').eq('id',rq.question_id).maybeSingle();
+  const{data:ps}=await db.from('players').select('id,display_name').in('id',[rq.delib_player_a,rq.delib_player_b].filter(Boolean));
+  const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+  document.getElementById('d-prompt').textContent=q?.prompt_text||'';
+  if(isA||isB){
+    document.getElementById('d-body').innerHTML=`<div class="delib-card"><h2>YOU'RE DEBATING</h2><div style="font-family:'Bebas Neue',sans-serif;font-size:1.5rem;">${isA?'AGREE':'DISAGREE'}</div></div>`;
+  }else{
+    document.getElementById('d-body').innerHTML=`<div style="color:var(--mut);font-size:.9rem;text-align:center;margin-top:1rem;"><b>${esc(pm[rq.delib_player_a]?.display_name||'?')}</b> vs <b>${esc(pm[rq.delib_player_b]?.display_name||'?')}</b><br><br>Listen and prepare to vote!</div>`;
+  }
+  if(!document.getElementById('v-delib').classList.contains('active'))showView('v-delib');
+}
+
+// DELIB VOTE
+async function handleDelibVote(){
+  if(hasDelibVoted){if(!document.getElementById('v-submitted').classList.contains('active'))showView('v-submitted');document.getElementById('sub-status').textContent='Vote cast! Waiting...';return;}
+  const{data:rq}=await db.from('room_questions').select('id,delib_player_a,delib_player_b').eq('room_id',roomId).eq('status','active').maybeSingle();
+  if(!rq)return;
+  const isDebater=rq.delib_player_a===playerId||rq.delib_player_b===playerId;
+  if(isDebater){showView('v-submitted');document.getElementById('sub-status').textContent='Waiting for the room to vote...';return;}
+  const{data:myV}=await db.from('deliberation_votes').select('id').eq('room_question_id',rq.id).eq('voter_player_id',playerId).maybeSingle();
+  if(myV){hasDelibVoted=true;showView('v-submitted');return;}
+  const{data:ps}=await db.from('players').select('id,display_name').in('id',[rq.delib_player_a,rq.delib_player_b].filter(Boolean));
+  const pm={};(ps||[]).forEach(p=>{pm[p.id]=p;});
+  document.getElementById('dv-body').innerHTML=`
+    <button class="btn btn-sec" onclick="castDelibVote('${rq.id}','${rq.delib_player_a}')" style="margin-bottom:.5rem;">👍 ${esc(pm[rq.delib_player_a]?.display_name||'?')}</button>
+    <button class="btn btn-sec" onclick="castDelibVote('${rq.id}','${rq.delib_player_b}')">👍 ${esc(pm[rq.delib_player_b]?.display_name||'?')}</button>`;
+  document.getElementById('dv-status').textContent='Who argued better?';
+  showView('v-dvote');
+}
+
+async function castDelibVote(rqId,winnerId){
+  if(hasDelibVoted)return;hasDelibVoted=true;
+  document.querySelectorAll('#dv-body .btn').forEach(b=>b.style.pointerEvents='none');
+  const{error}=await db.from('deliberation_votes').insert({room_question_id:rqId,voter_player_id:playerId,winner_player_id:winnerId});
+  if(error){hasDelibVoted=false;document.querySelectorAll('#dv-body .btn').forEach(b=>b.style.pointerEvents='');document.getElementById('dv-status').textContent='Error: '+error.message;return;}
+  showView('v-submitted');document.getElementById('sub-status').textContent='Vote cast! Waiting for result...';
+}
+
+// CHAR COUNTER
+document.getElementById('w-answer').addEventListener('input',function(){document.getElementById('w-char').textContent=this.value.length;});
+</script>
+</body>
+</html>
