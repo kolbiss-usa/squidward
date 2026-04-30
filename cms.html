@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pack Builder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0a; --surface: #131313; --border: #222; --border-hover: #333;
+      --text: #e0e0e0; --muted: #555; --accent: #ff5500; --accent-dim: rgba(255,85,0,0.1);
+      --font-display: 'Bebas Neue', sans-serif; --font-body: 'IBM Plex Mono', monospace;
+    }
+    body { font-family: var(--font-body); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+    .display { font-family: var(--font-display); letter-spacing: 0.05em; }
+    .accent { color: var(--accent); }
+    .view { display: none; }
+    .view.active { display: block; }
+    #view-password { min-height: 100vh; display: none; align-items: center; justify-content: center; }
+    #view-password.active { display: flex; }
+    .btn { font-family: var(--font-display); letter-spacing: 0.1em; font-size: 1rem; border: none; cursor: pointer; transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .btn-primary { background: var(--accent); color: #000; padding: 0.55rem 1.4rem; }
+    .btn-primary:hover { background: #ff7733; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 0.5rem 1rem; font-family: var(--font-body); font-size: 0.8rem; letter-spacing: 0.05em; cursor: pointer; transition: all 0.15s; }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: transparent; color: #444; border: 1px solid #222; padding: 0.3rem 0.7rem; font-family: var(--font-body); font-size: 0.72rem; cursor: pointer; transition: all 0.15s; }
+    .btn-danger:hover { border-color: #ef4444; color: #ef4444; }
+    input, textarea, select { background: #0f0f0f; border: 1px solid var(--border); color: var(--text); padding: 0.6rem 0.8rem; font-family: var(--font-body); font-size: 0.88rem; width: 100%; outline: none; transition: border-color 0.15s; appearance: none; }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    textarea { resize: vertical; line-height: 1.5; }
+    label { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; display: block; margin-bottom: 0.35rem; }
+    .field { margin-bottom: 1.1rem; }
+    .pack-card { background: var(--surface); border: 1px solid var(--border); padding: 1.1rem 1.3rem; cursor: pointer; transition: border-color 0.15s, background 0.15s; display: flex; justify-content: space-between; align-items: center; }
+    .pack-card:hover { border-color: var(--accent); background: var(--accent-dim); }
+    .question-row { background: var(--surface); border: 1px solid var(--border); padding: 0.9rem 1.1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; transition: border-color 0.15s; }
+    .question-row:hover { border-color: var(--border-hover); }
+    .tag { font-size: 0.62rem; padding: 0.12rem 0.5rem; border: 1px solid; letter-spacing: 0.12em; text-transform: uppercase; font-family: var(--font-display); display: inline-block; }
+    .type-btn { background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-family: var(--font-display); letter-spacing: 0.1em; font-size: 0.95rem; padding: 0.65rem 0.5rem; cursor: pointer; transition: all 0.15s; text-align: center; }
+    .type-btn:hover { border-color: var(--border-hover); color: var(--text); }
+    .type-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .status { font-size: 0.78rem; color: var(--muted); padding: 0.5rem 0; min-height: 1.5rem; }
+    .status.ok { color: #22c55e; }
+    .status.err { color: #ef4444; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    .panel { background: var(--surface); border: 1px solid var(--accent); padding: 1.4rem; margin-bottom: 1.2rem; }
+    .page { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 1.2rem 0; }
+    .empty { color: var(--muted); font-size: 0.82rem; padding: 1.5rem 0; }
+    .pack-grid { display: flex; flex-direction: column; gap: 0.6rem; }
+    .question-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    .import-tab { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-display); letter-spacing: 0.1em; font-size: 0.9rem; padding: 0.4rem 1rem 0.5rem; cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
+    .import-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .import-tab:hover { color: var(--text); }
+    #drop-zone:hover { border-color: var(--accent); color: var(--text); }
+    .preview-row td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.4; }
+    .preview-row.invalid td { opacity: 0.45; }
+    .preview-row th { padding: 0.3rem 0.6rem; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); text-align: left; border-bottom: 1px solid var(--border); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- PASSWORD -->
+<div id="view-password" class="view active">
+  <div style="width:100%; max-width:360px; padding:2rem;">
+    <div style="margin-bottom:2.5rem;">
+      <div class="display accent" style="font-size:3.5rem; line-height:0.9;">PACK</div>
+      <div class="display" style="font-size:3.5rem; line-height:0.9; color:var(--muted);">BUILDER</div>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="password-input" placeholder="—" onkeydown="if(event.key==='Enter') checkPassword()" autofocus />
+    </div>
+    <div id="password-error" class="status err"></div>
+    <button class="btn btn-primary" onclick="checkPassword()" style="width:100%; margin-top:0.5rem;">ENTER</button>
+  </div>
+</div>
+
+<!-- PACK LIST -->
+<div id="view-packs" class="view">
+  <div class="page">
+    <div class="header">
+      <div>
+        <span class="display accent" style="font-size:2.2rem;">PACK</span>
+        <span class="display" style="font-size:2.2rem; color:var(--muted);"> LIBRARY</span>
+      </div>
+      <button class="btn btn-primary" onclick="toggleCreateForm()">+ NEW PACK</button>
+    </div>
+    <div id="create-pack-panel" class="panel" style="display:none;">
+      <div class="display accent" style="font-size:1.5rem; margin-bottom:1rem;">NEW PACK</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+        <div class="field"><label>Pack Name</label><input type="text" id="new-pack-name" placeholder="e.g. Army Life" /></div>
+        <div class="field"><label>Category</label><input type="text" id="new-pack-category" placeholder="e.g. Military" /></div>
+      </div>
+      <div style="display:flex; gap:0.7rem; align-items:center;">
+        <button class="btn btn-primary" onclick="createPack()">CREATE</button>
+        <button class="btn-ghost btn" onclick="toggleCreateForm()">CANCEL</button>
+        <span id="create-status" class="status" style="margin-left:0.5rem;"></span>
+      </div>
+    </div>
+    <div id="packs-grid" class="pack-grid"></div>
+    <div id="packs-status" class="status"></div>
+  </div>
+</div>
+
+<!-- QUESTION LIST -->
+<div id="view-questions" class="view">
+  <div class="page">
+    <div style="margin-bottom:1.2rem;">
+      <button class="btn-ghost btn" onclick="goToPacks()">&#8592; BACK</button>
+    </div>
+    <div class="header">
+      <div>
+        <span class="display accent" style="font-size:2.2rem;" id="current-pack-name">PACK</span>
+        <span class="display" style="font-size:2.2rem; color:var(--muted);"> QUESTIONS</span>
+      </div>
+      <div style="display:flex; gap:0.6rem;">
+        <button class="btn-ghost btn" onclick="toggleImportPanel()">&#8593; IMPORT CSV</button>
+        <button class="btn btn-primary" onclick="goToAddQuestion()">+ ADD QUESTION</button>
+      </div>
+    </div>
+
+    <!-- CSV Import Panel -->
+    <div id="import-panel" class="panel" style="display:none; margin-bottom:1.5rem;">
+      <div class="display accent" style="font-size:1.5rem; margin-bottom:0.3rem;">IMPORT CSV</div>
+      <div style="font-size:0.75rem; color:var(--muted); margin-bottom:1.2rem;">
+        Required columns: <span style="color:var(--text);">type, prompt, option_a, option_b</span>
+        &nbsp;&middot;&nbsp; option_a and option_b only needed for match type
+      </div>
+      <div style="display:flex; gap:0; margin-bottom:1rem; border-bottom:1px solid var(--border);">
+        <button class="import-tab active" id="tab-paste" onclick="switchImportTab('paste')">PASTE</button>
+        <button class="import-tab" id="tab-file" onclick="switchImportTab('file')">FILE UPLOAD</button>
+      </div>
+      <div id="import-paste-area">
+        <div class="field">
+          <label>Paste CSV content (include the header row)</label>
+          <textarea id="csv-paste" rows="7" placeholder="type,prompt,option_a,option_b
+free_write,Would you rather eat a bug or drink toilet water,,
+match,Pick one,Go to war,Stay home forever
+hot_take,Cats are better than dogs,,
+poll,Remote work beats the office,,
+player_pick,Who would survive a zombie apocalypse,,"></textarea>
+        </div>
+      </div>
+      <div id="import-file-area" style="display:none;">
+        <div class="field">
+          <label>Select .csv file</label>
+          <div id="drop-zone" onclick="document.getElementById('csv-file-input').click()" style="border:1px dashed var(--border); padding:2rem; text-align:center; cursor:pointer; color:var(--muted); font-size:0.82rem; transition:all 0.15s;">
+            Click to select a .csv file
+            <div id="drop-zone-filename" style="margin-top:0.4rem; color:var(--accent); font-size:0.8rem;"></div>
+          </div>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none;" onchange="handleFileSelect(event)" />
+        </div>
+      </div>
+      <div style="display:flex; gap:0.7rem; align-items:center;">
+        <button class="btn btn-primary" onclick="parseCSV()">PREVIEW</button>
+        <button class="btn-ghost btn" onclick="toggleImportPanel()">CANCEL</button>
+      </div>
+      <div id="import-preview" style="display:none;">
+        <hr style="margin-top:1.2rem;" />
+        <div style="display:flex; justify-content:space-between; align-items:center; margin:1rem 0 0.8rem;">
+          <div id="preview-summary" style="font-size:0.82rem; color:var(--muted);"></div>
+          <button class="btn btn-primary" onclick="importQuestions()">IMPORT ALL VALID</button>
+        </div>
+        <div style="overflow-x:auto; margin-bottom:0.5rem;">
+          <table id="preview-table" style="width:100%; border-collapse:collapse; font-size:0.76rem;"></table>
+        </div>
+        <div id="import-status" class="status"></div>
+      </div>
+    </div>
+
+    <div id="questions-list" class="question-list"></div>
+    <div id="questions-status" class="status"></div>
+  </div>
+</div>
+
+<!-- ADD QUESTION -->
+<div id="view-add-question" class="view">
+  <div class="page">
+    <div style="margin-bottom:1.2rem;">
+      <button class="btn-ghost btn" onclick="showView('view-questions')">&#8592; BACK</button>
+    </div>
+    <div class="display accent" style="font-size:2.2rem; margin-bottom:1.5rem;">ADD QUESTION</div>
+    <div class="field">
+      <label>Question Type</label>
+      <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:0.5rem; margin-top:0.3rem;">
+        <button class="type-btn" onclick="selectType('free_write')" id="type-free_write">FREE<br>WRITE</button>
+        <button class="type-btn" onclick="selectType('player_pick')" id="type-player_pick">PLAYER<br>PICK</button>
+        <button class="type-btn" onclick="selectType('match')" id="type-match">MATCH</button>
+        <button class="type-btn" onclick="selectType('hot_take')" id="type-hot_take">HOT<br>TAKE</button>
+        <button class="type-btn" onclick="selectType('poll')" id="type-poll">POLL</button>
+      </div>
+    </div>
+    <div id="type-description" style="font-size:0.78rem; color:var(--muted); margin-bottom:1rem; min-height:1.2rem;"></div>
+    <div class="field">
+      <label>Prompt</label>
+      <textarea id="question-prompt" rows="4" placeholder="Write your question or prompt here..."></textarea>
+    </div>
+    <div id="match-options" style="display:none;">
+      <hr />
+      <div style="font-size:0.78rem; color:var(--muted); margin-bottom:0.8rem;">The two options players choose between:</div>
+      <div class="options-grid">
+        <div class="field"><label>Option A</label><input type="text" id="option-a" placeholder="First choice..." /></div>
+        <div class="field"><label>Option B</label><input type="text" id="option-b" placeholder="Second choice..." /></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="addQuestion()" style="width:100%; margin-top:0.5rem; padding:0.7rem;">ADD QUESTION</button>
+    <div id="add-question-status" class="status"></div>
+  </div>
+</div>
+
+<script>
+  const { createClient } = supabase;
+  const db = createClient(
+    'https://nfdfwapbxjkqwqwanhoi.supabase.co',
+    'sb_publishable_BIMyzuSl9sw4-oahILCGjQ_Bx-XAhxq'
+  );
+
+  const PASSWORD = 'squidward';
+  let currentPackId = null;
+  let currentPackName = null;
+  let selectedType = null;
+  let packsMap = {};
+  let parsedRows = [];
+  let fileCSVContent = '';
+
+  const VALID_TYPES = ['free_write', 'player_pick', 'match', 'hot_take', 'poll'];
+
+  const TYPE_COLORS = {
+    free_write: '#3b82f6', player_pick: '#a855f7', match: '#10b981', hot_take: '#f59e0b', poll: '#6366f1'
+  };
+
+  const TYPE_DESC = {
+    free_write: 'Players write a free answer. Room votes on the funniest.',
+    player_pick: '"Who in this room would..." — everyone points at someone.',
+    match: 'Players choose between Option A or B. Others guess who picked what.',
+    hot_take: 'Agree or disagree. Points for siding with the majority.',
+    poll: 'Agree or disagree. No points — just reveals the room.',
+  };
+
+  // VIEWS
+  function showView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  // PASSWORD
+  function checkPassword() {
+    const val = document.getElementById('password-input').value;
+    if (val === PASSWORD) { showView('view-packs'); loadPacks(); }
+    else {
+      document.getElementById('password-error').textContent = 'Wrong password.';
+      document.getElementById('password-input').value = '';
+    }
+  }
+
+  // PACKS
+  async function loadPacks() {
+    const statusEl = document.getElementById('packs-status');
+    statusEl.textContent = 'Loading...'; statusEl.className = 'status';
+    const { data, error } = await db.from('packs').select('*').order('created_at', { ascending: false });
+    if (error) { statusEl.textContent = 'Error: ' + error.message; statusEl.className = 'status err'; return; }
+    statusEl.textContent = '';
+    const grid = document.getElementById('packs-grid');
+    if (!data.length) { grid.innerHTML = '<div class="empty">No packs yet. Create your first one.</div>'; return; }
+    const { data: counts } = await db.from('questions').select('pack_id');
+    const countMap = {};
+    (counts || []).forEach(q => { countMap[q.pack_id] = (countMap[q.pack_id] || 0) + 1; });
+    data.forEach(p => packsMap[p.id] = p.name);
+    grid.innerHTML = data.map(pack => `
+      <div class="pack-card" onclick="openPack('${pack.id}')">
+        <div>
+          <div class="display" style="font-size:1.25rem; margin-bottom:0.2rem;">${pack.name}</div>
+          <div style="font-size:0.75rem; color:var(--muted);">${pack.category || 'No category'}</div>
+        </div>
+        <div style="text-align:right; flex-shrink:0;">
+          <div style="font-size:0.8rem; color:var(--muted);">${countMap[pack.id] || 0} questions</div>
+          ${pack.is_community ? '<div class="tag" style="color:#a855f7; border-color:#a855f7; margin-top:0.3rem;">COMMUNITY</div>' : ''}
+        </div>
+      </div>`).join('');
+  }
+
+  function toggleCreateForm() {
+    const panel = document.getElementById('create-pack-panel');
+    const isHidden = panel.style.display === 'none';
+    panel.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) document.getElementById('new-pack-name').focus();
+    document.getElementById('create-status').textContent = '';
+  }
+
+  async function createPack() {
+    const name = document.getElementById('new-pack-name').value.trim();
+    const category = document.getElementById('new-pack-category').value.trim();
+    const statusEl = document.getElementById('create-status');
+    if (!name) { statusEl.textContent = 'Pack name is required.'; statusEl.className = 'status err'; return; }
+    statusEl.textContent = 'Creating...'; statusEl.className = 'status';
+    const { error } = await db.from('packs').insert({ name, category: category || null, is_community: false, is_approved: true });
+    if (error) { statusEl.textContent = 'Error: ' + error.message; statusEl.className = 'status err'; return; }
+    document.getElementById('new-pack-name').value = '';
+    document.getElementById('new-pack-category').value = '';
+    document.getElementById('create-pack-panel').style.display = 'none';
+    loadPacks();
+  }
+
+  // QUESTIONS
+  function goToPacks() { showView('view-packs'); loadPacks(); }
+
+  function openPack(packId) {
+    currentPackId = packId;
+    currentPackName = packsMap[packId];
+    document.getElementById('current-pack-name').textContent = currentPackName;
+    showView('view-questions');
+    loadQuestions();
+  }
+
+  async function loadQuestions() {
+    const statusEl = document.getElementById('questions-status');
+    statusEl.textContent = 'Loading...'; statusEl.className = 'status';
+    const { data, error } = await db.from('questions').select('*, options(*)').eq('pack_id', currentPackId).order('created_at', { ascending: false });
+    if (error) { statusEl.textContent = 'Error: ' + error.message; statusEl.className = 'status err'; return; }
+    statusEl.textContent = '';
+    const list = document.getElementById('questions-list');
+    if (!data.length) { list.innerHTML = '<div class="empty">No questions yet. Add the first one.</div>'; return; }
+    list.innerHTML = data.map(q => {
+      const color = TYPE_COLORS[q.question_type] || '#666';
+      const label = q.question_type.replace('_', ' ').toUpperCase();
+      let extra = '';
+      if (q.options && q.options.length >= 2) {
+        extra = `<div style="margin-top:0.4rem; font-size:0.73rem; color:var(--muted);">A: ${q.options[0].option_text} &nbsp;&middot;&nbsp; B: ${q.options[1].option_text}</div>`;
+      }
+      return `<div class="question-row">
+        <div style="flex:1; min-width:0;">
+          <span class="tag" style="color:${color}; border-color:${color}; margin-bottom:0.45rem;">${label}</span>
+          <div style="font-size:0.88rem; line-height:1.45; margin-top:0.35rem;">${q.prompt_text}</div>
+          ${extra}
+        </div>
+        <button class="btn-danger" onclick="deleteQuestion('${q.id}', event)">DELETE</button>
+      </div>`;
+    }).join('');
+  }
+
+  async function deleteQuestion(id, event) {
+    event.stopPropagation();
+    if (!confirm('Delete this question?')) return;
+    const { error } = await db.from('questions').delete().eq('id', id);
+    if (error) { alert('Error: ' + error.message); return; }
+    loadQuestions();
+  }
+
+  // CSV IMPORT
+  function toggleImportPanel() {
+    const panel = document.getElementById('import-panel');
+    const isHidden = panel.style.display === 'none';
+    panel.style.display = isHidden ? 'block' : 'none';
+    if (!isHidden) {
+      document.getElementById('import-preview').style.display = 'none';
+      document.getElementById('csv-paste').value = '';
+      document.getElementById('drop-zone-filename').textContent = '';
+      document.getElementById('import-status').textContent = '';
+      parsedRows = []; fileCSVContent = '';
+    }
+  }
+
+  function switchImportTab(tab) {
+    document.getElementById('import-paste-area').style.display = tab === 'paste' ? 'block' : 'none';
+    document.getElementById('import-file-area').style.display = tab === 'file' ? 'block' : 'none';
+    document.getElementById('tab-paste').classList.toggle('active', tab === 'paste');
+    document.getElementById('tab-file').classList.toggle('active', tab === 'file');
+    document.getElementById('import-preview').style.display = 'none';
+  }
+
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    document.getElementById('drop-zone-filename').textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = e => { fileCSVContent = e.target.result; };
+    reader.readAsText(file);
+  }
+
+  // Simple CSV parser — handles quoted fields with commas inside
+  function parseCSVText(text) {
+    const lines = text.trim().split(/\r?\n/);
+    return lines.map(line => {
+      const fields = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQuotes = !inQuotes; }
+        else if (ch === ',' && !inQuotes) { fields.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+      fields.push(current.trim());
+      return fields;
+    });
+  }
+
+  function validateRow(fields) {
+    const [type, prompt, optionA, optionB] = fields;
+    if (!type || !prompt) return 'Missing type or prompt';
+    if (!VALID_TYPES.includes(type.toLowerCase())) return 'Invalid type: ' + type;
+    if (type.toLowerCase() === 'match' && (!optionA || !optionB)) return 'Match requires option_a and option_b';
+    return null; // valid
+  }
+
+  function parseCSV() {
+    const activeTab = document.getElementById('tab-paste').classList.contains('active') ? 'paste' : 'file';
+    const rawText = activeTab === 'paste'
+      ? document.getElementById('csv-paste').value
+      : fileCSVContent;
+
+    if (!rawText.trim()) {
+      alert('Nothing to parse. Paste content or select a file first.');
+      return;
+    }
+
+    const allRows = parseCSVText(rawText);
+    // Skip header row
+    const dataRows = allRows.slice(1);
+
+    parsedRows = dataRows.map((fields, i) => {
+      const error = validateRow(fields);
+      return {
+        rowNum: i + 2,
+        type: (fields[0] || '').toLowerCase().trim(),
+        prompt: (fields[1] || '').trim(),
+        optionA: (fields[2] || '').trim(),
+        optionB: (fields[3] || '').trim(),
+        error
+      };
+    }).filter(r => r.prompt); // drop truly empty rows
+
+    const valid = parsedRows.filter(r => !r.error);
+    const invalid = parsedRows.filter(r => r.error);
+
+    document.getElementById('preview-summary').textContent =
+      valid.length + ' valid  ·  ' + invalid.length + ' invalid';
+
+    const table = document.getElementById('preview-table');
+    table.innerHTML = `
+      <thead>
+        <tr class="preview-row">
+          <th>#</th><th>Type</th><th>Prompt</th><th>Options</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${parsedRows.map(r => {
+          const color = TYPE_COLORS[r.type] || '#666';
+          const optionsCell = r.type === 'match' ? `A: ${r.optionA}<br>B: ${r.optionB}` : '—';
+          const statusCell = r.error
+            ? `<span style="color:#ef4444;">${r.error}</span>`
+            : `<span style="color:#22c55e;">OK</span>`;
+          return `<tr class="preview-row ${r.error ? 'invalid' : ''}">
+            <td style="color:var(--muted);">${r.rowNum}</td>
+            <td><span class="tag" style="color:${color}; border-color:${color};">${r.type.replace('_',' ').toUpperCase()}</span></td>
+            <td style="max-width:280px;">${r.prompt}</td>
+            <td style="color:var(--muted); white-space:nowrap;">${optionsCell}</td>
+            <td style="white-space:nowrap;">${statusCell}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>`;
+
+    document.getElementById('import-preview').style.display = 'block';
+    document.getElementById('import-status').textContent = '';
+  }
+
+  async function importQuestions() {
+    const valid = parsedRows.filter(r => !r.error);
+    if (!valid.length) { alert('No valid rows to import.'); return; }
+
+    const statusEl = document.getElementById('import-status');
+    statusEl.textContent = 'Importing ' + valid.length + ' questions...';
+    statusEl.className = 'status';
+
+    let imported = 0;
+    let failed = 0;
+
+    for (const row of valid) {
+      const { data: qData, error: qError } = await db
+        .from('questions')
+        .insert({ pack_id: currentPackId, prompt_text: row.prompt, question_type: row.type })
+        .select().single();
+
+      if (qError) { failed++; continue; }
+
+      if (row.type === 'match') {
+        const { error: oError } = await db.from('options').insert([
+          { question_id: qData.id, option_text: row.optionA },
+          { question_id: qData.id, option_text: row.optionB }
+        ]);
+        if (oError) { failed++; continue; }
+      }
+      imported++;
+    }
+
+    statusEl.className = failed ? 'status err' : 'status ok';
+    statusEl.textContent = imported + ' imported' + (failed ? ', ' + failed + ' failed.' : '.');
+
+    if (imported > 0) {
+      setTimeout(() => {
+        toggleImportPanel();
+        loadQuestions();
+      }, 1200);
+    }
+  }
+
+  // ADD QUESTION
+  function goToAddQuestion() {
+    selectedType = null;
+    document.getElementById('question-prompt').value = '';
+    document.getElementById('option-a').value = '';
+    document.getElementById('option-b').value = '';
+    document.getElementById('match-options').style.display = 'none';
+    document.getElementById('type-description').textContent = '';
+    document.getElementById('add-question-status').textContent = '';
+    document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+    showView('view-add-question');
+  }
+
+  function selectType(type) {
+    selectedType = type;
+    document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('type-' + type).classList.add('active');
+    document.getElementById('match-options').style.display = type === 'match' ? 'block' : 'none';
+    document.getElementById('type-description').textContent = TYPE_DESC[type] || '';
+    document.getElementById('question-prompt').focus();
+  }
+
+  async function addQuestion() {
+    const statusEl = document.getElementById('add-question-status');
+    const prompt = document.getElementById('question-prompt').value.trim();
+    if (!selectedType) { statusEl.textContent = 'Select a question type first.'; statusEl.className = 'status err'; return; }
+    if (!prompt) { statusEl.textContent = 'Prompt is required.'; statusEl.className = 'status err'; return; }
+    let optionA = '', optionB = '';
+    if (selectedType === 'match') {
+      optionA = document.getElementById('option-a').value.trim();
+      optionB = document.getElementById('option-b').value.trim();
+      if (!optionA || !optionB) { statusEl.textContent = 'Both options required for Match.'; statusEl.className = 'status err'; return; }
+    }
+    statusEl.textContent = 'Saving...'; statusEl.className = 'status';
+    const { data: qData, error: qError } = await db.from('questions')
+      .insert({ pack_id: currentPackId, prompt_text: prompt, question_type: selectedType })
+      .select().single();
+    if (qError) { statusEl.textContent = 'Error: ' + qError.message; statusEl.className = 'status err'; return; }
+    if (selectedType === 'match') {
+      const { error: oError } = await db.from('options').insert([
+        { question_id: qData.id, option_text: optionA },
+        { question_id: qData.id, option_text: optionB }
+      ]);
+      if (oError) { statusEl.textContent = 'Question saved but options failed: ' + oError.message; statusEl.className = 'status err'; return; }
+    }
+    document.getElementById('question-prompt').value = '';
+    document.getElementById('option-a').value = '';
+    document.getElementById('option-b').value = '';
+    statusEl.textContent = 'Question added. Write another or go back.';
+    statusEl.className = 'status ok';
+    document.getElementById('question-prompt').focus();
+  }
+</script>
+</body>
+</html>
